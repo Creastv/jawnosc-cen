@@ -5,7 +5,7 @@ if (!defined('ABSPATH')) exit;
  * Shortcode: [lokal_history id="123" label="Historia cen" class=""]
  * - Renderuje przycisk; modal renderowany globalnie w wp_footer (na dole strony).
  * - Dane (cena, data, cena za m²) ładowane AJAX-em z repeatera ACF: history_price.
- * - NOWE: jeśli lokal NIE ma aktualnej ceny i NIE ma historii, shortcode nie renderuje nic.
+ * - Jeśli lokal NIE ma aktualnej ceny i NIE ma historii, shortcode nie renderuje nic.
  */
 class DGE_Shortcode_History
 {
@@ -14,7 +14,6 @@ class DGE_Shortcode_History
 
     private static $assets_enqueued = false;
     private static $modal_printed   = false;
-    private static $shortcode_used  = false; // czy na stronie użyto shortcode'u (żeby wiedzieć, czy renderować modal w footerze)
 
     public static function register()
     {
@@ -24,21 +23,22 @@ class DGE_Shortcode_History
         add_action('wp_ajax_' . self::ACTION,        [__CLASS__, 'ajax_fetch']);
         add_action('wp_ajax_nopriv_' . self::ACTION, [__CLASS__, 'ajax_fetch']);
 
-        // modal na dole strony
+        // Zawsze drukuj modal w stopce (raz)
         add_action('wp_footer', [__CLASS__, 'print_modal_at_footer'], 1000);
 
-        // rejestracja assets
-        add_action('wp_enqueue_scripts', [__CLASS__, 'register_assets']);
+        // Zawsze zarejestruj i załaduj assets na froncie
+        add_action('wp_enqueue_scripts', [__CLASS__, 'enqueue_assets']);
     }
 
-    /** Rejestrujemy skrypty i style (załadowane tylko gdy użyto shortcode’u) */
-    public static function register_assets()
+    /** Ładujemy CSS/JS na każdej stronie frontu (żeby działało także dla treści z AJAX-a) */
+    public static function enqueue_assets()
     {
-        $ver  = '1.0.2';
-        $base = plugin_dir_url(dirname(__FILE__)); // /includes → baza pluginu
-        $gif = plugin_dir_url(dirname(__FILE__)) . 'assets/loading.gif';
+        if (is_admin() || self::$assets_enqueued) return;
 
-        // CSS (opcjonalnie możesz podmienić na fizyczny plik w /assets)
+        $ver  = '1.0.3';
+        $base = plugin_dir_url(dirname(__FILE__));
+
+        // CSS
         wp_register_style('dge-history-css', $base . 'assets/css/dge-history.css', [], $ver);
 
         // JS
@@ -46,6 +46,15 @@ class DGE_Shortcode_History
         wp_localize_script('dge-history-js', 'DGE_HIST', [
             'ajax_url' => admin_url('admin-ajax.php'),
         ]);
+
+        // Enqueue na froncie zawsze (lekki skrypt / CSS)
+        wp_enqueue_style('dge-history-css');
+        wp_enqueue_script('dge-history-js');
+
+        // Fallback inline, jeśli nie masz plików w /assets
+        self::maybe_inline_assets();
+
+        self::$assets_enqueued = true;
     }
 
     /** Shortcode: renderuje wyłącznie trigger */
@@ -60,56 +69,45 @@ class DGE_Shortcode_History
         $post_id = self::resolve_post_id($a['id']);
         if (!$post_id) return '';
 
-        // --- NOWE: sprawdź czy są jakiekolwiek dane (aktualna cena lub historia)
+        // sprawdź czy są jakiekolwiek dane (aktualna cena lub historia)
         $has_current = self::has_current_price($post_id);
         $has_history = self::has_history_rows($post_id);
 
         if (!$has_current && !$has_history) {
-            // Brak danych → nic nie renderuj
             return '';
         }
-
-        // enqueue assets tylko raz (robimy to dopiero, gdy wiemy że renderujemy)
-        if (!self::$assets_enqueued) {
-            self::$assets_enqueued = true;
-            wp_enqueue_style('dge-history-css');
-            wp_enqueue_script('dge-history-js');
-            self::maybe_inline_assets(); // fallback inline, jeśli nie masz plików /assets
-        }
-
-        self::$shortcode_used = true;
 
         // nonce per post
         $nonce = wp_create_nonce(self::NONCE_NAME . '|' . $post_id);
 
         // przycisk z danymi
         ob_start(); ?>
-<a href="#" class="dge-hist-trigger <?php echo esc_attr($a['class']); ?>" data-post="<?php echo esc_attr($post_id); ?>"
-    data-nonce="<?php echo esc_attr($nonce); ?>" aria-haspopup="dialog" aria-controls="dge-hist-modal">
-    <?php echo esc_html($a['label']); ?>
-</a>
-<?php
+        <a href="#" class="dge-hist-trigger <?php echo esc_attr($a['class']); ?>" data-post="<?php echo esc_attr($post_id); ?>"
+            data-nonce="<?php echo esc_attr($nonce); ?>" aria-haspopup="dialog" aria-controls="dge-hist-modal">
+            <?php echo esc_html($a['label']); ?>
+        </a>
+    <?php
         return ob_get_clean();
     }
 
-    /** Modal w stopce (raz na stronę) */
+    /** Modal w stopce (raz na stronę) — bez warunkowania na użycie shortcode’u */
     public static function print_modal_at_footer()
     {
-        if (self::$modal_printed || !self::$shortcode_used) return;
+        if (self::$modal_printed || is_admin()) return;
         self::$modal_printed = true; ?>
-<div id="dge-hist-modal" class="dge-hist-modal" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="dge-hist-backdrop" data-close></div>
-    <div class="dge-hist-dialog" role="document">
-        <a href="#" class="dge-hist-close" title="Zamknij" aria-label="Zamknij" data-close>×</a>
-        <div class="dge-hist-body">
-            <div class="dge-hist-loading">
-                <img src="<?php echo plugin_dir_url(dirname(__FILE__)) . 'assets/img/loading.gif'; ?>"
-                    alt="ładowanie" />
+        <div id="dge-hist-modal" class="dge-hist-modal" role="dialog" aria-modal="true" aria-hidden="true">
+            <div class="dge-hist-backdrop" data-close></div>
+            <div class="dge-hist-dialog" role="document">
+                <a href="#" class="dge-hist-close" title="Zamknij" aria-label="Zamknij" data-close>×</a>
+                <div class="dge-hist-body">
+                    <div class="dge-hist-loading">
+                        <img src="<?php echo plugin_dir_url(dirname(__FILE__)) . 'assets/img/loading.gif'; ?>"
+                            alt="ładowanie" />
+                    </div>
+                </div>
             </div>
         </div>
-    </div>
-</div>
-<?php
+    <?php
     }
 
     public static function ajax_fetch()
@@ -145,34 +143,34 @@ class DGE_Shortcode_History
         }
 
         ob_start(); ?>
-<h3>Historia cen</h3>
-<?php if (empty($rows)) : ?>
-<p>Brak danych historycznych.</p>
-<?php else : ?>
-<div class="dge-hist-table-wrap">
-    <table class="dge-hist-table">
-        <thead>
-            <tr>
-                <th>Cena całkowita</th>
-                <th>Data</th>
-                <th>Cena za m²</th>
-            </tr>
-        </thead>
-        <tbody>
-            <?php foreach ($rows as $r) :
+        <h3>Historia cen</h3>
+        <?php if (empty($rows)) : ?>
+            <p>Brak danych historycznych.</p>
+        <?php else : ?>
+            <div class="dge-hist-table-wrap">
+                <table class="dge-hist-table">
+                    <thead>
+                        <tr>
+                            <th>Cena całkowita</th>
+                            <th>Data</th>
+                            <th>Cena za m²</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($rows as $r) :
                             $price    = self::format_money(self::to_float($r['price'] ?? ''), 2);
                             $date     = self::format_date($r['time'] ?? '');
                             $price_m2 = self::format_money(self::to_float($r['price_per_m2'] ?? ''), 2);
                         ?>
-            <tr>
-                <td><?php echo $price    !== '' ? esc_html($price)    : '—'; ?></td>
-                <td><?php echo $date     !== '' ? esc_html($date)     : '—'; ?></td>
-                <td><?php echo $price_m2 !== '' ? esc_html($price_m2) : '—'; ?></td>
-            </tr>
-            <?php endforeach; ?>
-        </tbody>
-    </table>
-</div>
+                            <tr>
+                                <td><?php echo $price    !== '' ? esc_html($price)    : '—'; ?></td>
+                                <td><?php echo $date     !== '' ? esc_html($date)     : '—'; ?></td>
+                                <td><?php echo $price_m2 !== '' ? esc_html($price_m2) : '—'; ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
 <?php endif;
         $html = ob_get_clean();
 
@@ -225,7 +223,6 @@ class DGE_Shortcode_History
         if ($v === null) return '';
         $v = trim((string)$v);
         if ($v === '') return '';
-        // jeśli w treści jest "aktualna cena (...)", zostaw całość
         if (stripos($v, 'aktualna cena') !== false) return $v;
         return self::normalize_iso_ymd($v);
     }
@@ -236,21 +233,21 @@ class DGE_Shortcode_History
         $v = trim((string)$v);
         if ($v === '') return '';
 
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) return $v;                // YYYY-MM-DD
-        if (preg_match('/^(\d{4})(\d{2})(\d{2})$/', $v, $m))                   // YYYYMMDD
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) return $v;
+        if (preg_match('/^(\d{4})(\d{2})(\d{2})$/', $v, $m))
             return sprintf('%04d-%02d-%02d', $m[1], $m[2], $m[3]);
-        if (preg_match('/^(\d{2})[.\-\/](\d{2})[.\-\/](\d{4})$/', $v, $m))     // DD.MM.YYYY / DD-MM-YYYY / DD/MM/YYYY
+        if (preg_match('/^(\d{2})[.\-\/](\d{2})[.\-\/](\d{4})$/', $v, $m))
             return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
-        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $v, $m))           // mm/dd/yyyy
+        if (preg_match('/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/', $v, $m))
             return sprintf('%04d-%02d-%02d', $m[3], $m[1], $m[2]);
 
         $t = strtotime($v);
-        return $t ? date('Y-m-d', $t) : $v; // jeśli nie data, zwróć oryginał (np. "aktualna cena")
+        return $t ? date('Y-m-d', $t) : $v;
     }
 
     /**
      * Fallback inline dla CSS/JS (jeśli nie masz plików w /assets).
-     * Usuń tę metodę i linijkę self::maybe_inline_assets(), gdy dołożysz pliki statyczne.
+     * Usuń tę metodę i enqueue pliki, gdy dodasz /assets.
      */
     private static function maybe_inline_assets()
     {
@@ -260,12 +257,12 @@ class DGE_Shortcode_History
             wp_enqueue_style('dge-history-inline-css');
         }
         $css = '
-.dge-hist-trigger{cursor:pointer; background:none; border:none; margin-top:10px; margin-bottom:10px; padding:0; display:block; font-weight:300; font-size:14px; white-space:nowrap;}
-.dge-hist-modal{position:fixed;inset:0;display:none; z-index: 9999;}
+.dge-hist-trigger{cursor:pointer;background:none;border:none;margin:10px 0;padding:0;display:inline-flex;gap:8px;align-items:center;font-weight:500;font-size:14px;}
+.dge-hist-modal{position:fixed;inset:0;display:none;z-index:9999}
 .dge-hist-modal[aria-hidden="false"]{display:block}
 .dge-hist-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5)}
-.dge-hist-dialog{position:relative;max-width:720px;margin:6vh auto;background:#fff;padding:16px;z-index:1}
-// .dge-hist-close{position:absolute;top:8px;right:8px;font-size:20px;line-height:1;background:transparent;border:0;cursor:pointer;margin-top:0}
+.dge-hist-dialog{position:relative;max-width:720px;margin:6vh auto;background:#fff;padding:16px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.2);z-index:1}
+.dge-hist-close{position:absolute;top:8px;right:10px;font-size:20px;line-height:1;background:transparent;border:0;cursor:pointer;text-decoration:none}
 .dge-hist-loading{padding:24px;text-align:center}
 .dge-hist-table-wrap{overflow:auto;max-height:70vh}
 .dge-hist-table{width:100%;border-collapse:collapse}
@@ -302,6 +299,7 @@ class DGE_Shortcode_History
         });
     }
 
+    // Delegowany handler — działa także dla elementów doładowanych przez AJAX
     $(document).on("click", ".dge-hist-trigger", function(e){
         e.preventDefault();
         var $btn   = $(this);
