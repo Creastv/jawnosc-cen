@@ -53,32 +53,51 @@ final class Dane_Gov_Exporter
         }
     }
 
+    // public static function activate()
+    // {
+    //     // Zaplanuj CRON na 02:00
+    //     if (!wp_next_scheduled(self::CRON_HOOK)) {
+    //         $now = current_time('timestamp');
+    //         $today_2 = mktime(2, 0, 0, date('m', $now), date('d', $now), date('Y', $now));
+    //         $first = ($now < $today_2) ? $today_2 : $today_2 + DAY_IN_SECONDS;
+    //         wp_schedule_event($first, 'daily', self::CRON_HOOK);
+    //     }
+
+    //     // Upewnij się, że katalog /dane istnieje
+    //     $dir = self::target_dir();
+    //     if (!file_exists($dir)) {
+    //         wp_mkdir_p($dir);
+    //     }
+    //     // Spróbuj zabezpieczyć i przygotować katalog
+    //     if (is_dir($dir) && is_writable(dirname($dir))) {
+    //         if (!file_exists($dir . 'index.html')) {
+    //             @file_put_contents($dir . 'index.html', '');
+    //         }
+    //         // opcjonalnie zablokuj listing (jeśli używasz Apache i chcesz)
+    //         if (!file_exists($dir . '.htaccess')) {
+    //             @file_put_contents($dir . '.htaccess', "Options -Indexes\n");
+    //         }
+    //     }
+    // }
     public static function activate()
     {
-        // Zaplanuj CRON na 02:00
-        if (!wp_next_scheduled(self::CRON_HOOK)) {
-            $now = current_time('timestamp');
-            $today_2 = mktime(2, 0, 0, date('m', $now), date('d', $now), date('Y', $now));
-            $first = ($now < $today_2) ? $today_2 : $today_2 + DAY_IN_SECONDS;
-            wp_schedule_event($first, 'daily', self::CRON_HOOK);
-        }
-
         // Upewnij się, że katalog /dane istnieje
         $dir = self::target_dir();
         if (!file_exists($dir)) {
             wp_mkdir_p($dir);
         }
+
         // Spróbuj zabezpieczyć i przygotować katalog
         if (is_dir($dir) && is_writable(dirname($dir))) {
             if (!file_exists($dir . 'index.html')) {
                 @file_put_contents($dir . 'index.html', '');
             }
-            // opcjonalnie zablokuj listing (jeśli używasz Apache i chcesz)
             if (!file_exists($dir . '.htaccess')) {
                 @file_put_contents($dir . '.htaccess', "Options -Indexes\n");
             }
         }
     }
+
 
     public static function deactivate()
     {
@@ -562,14 +581,14 @@ add_action('admin_menu', function () {
                 }
             }
 ?>
-<div class="wrap">
-    <h1>Eksport lokali do dane.gov.pl</h1>
-    <form method="post">
-        <?php submit_button('Eksportuj teraz', 'primary', 'dge_do_export'); ?>
-    </form>
-    <p>Eksport dzienny uruchamia się automatycznie o 02:00. Pliki znajdziesz w katalogu <code>/dane/</code> w głównym
-        katalogu WordPressa.</p>
-</div>
+        <div class="wrap">
+            <h1>Eksport lokali do dane.gov.pl</h1>
+            <form method="post">
+                <?php submit_button('Eksportuj teraz', 'primary', 'dge_do_export'); ?>
+            </form>
+            <p>Eksport dzienny uruchamia się automatycznie o 02:00. Pliki znajdziesz w katalogu <code>/dane/</code> w głównym
+                katalogu WordPressa.</p>
+        </div>
 <?php
         }
     );
