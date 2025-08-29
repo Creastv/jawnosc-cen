@@ -220,6 +220,7 @@ final class Dane_Gov_Exporter
 
         $fh = fopen($file_daily, 'w');
         if (!$fh) return new \WP_Error('open_failed', 'Nie udało się otworzyć pliku do zapisu.');
+        fwrite($fh, "\xEF\xBB\xBF");
         fputcsv($fh, $columns, ',');
 
         $opt = class_exists('DGE_Settings') ? DGE_Settings::get() : [];
