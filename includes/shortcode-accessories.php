@@ -94,12 +94,14 @@ class DGE_Shortcode_Accessories
   });
 
   // Zamknięcie modala (krzyżyk, backdrop, ESC)
-  document.addEventListener('click', function(e){
-    if(e.target.matches('[data-dge-close], .dge-acc-backdrop')){
-    e.preventDefault();
-      closeM(e.target.closest('.dge-acc-modal'));
-    }
-  });
+document.addEventListener('click', function (e) {
+  const trigger = e.target.closest('[data-dge-close], .dge-acc-backdrop');
+  if (!trigger) return;
+
+  e.preventDefault(); // teraz faktycznie się wykona
+  const modal = trigger.closest('.dge-acc-modal');
+  if (modal) closeM(modal);
+});
   document.addEventListener('keydown', function(e){
     if(e.key === 'Escape'){
       var m = qs('#{$modal_id}');
