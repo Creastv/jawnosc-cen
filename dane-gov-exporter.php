@@ -29,6 +29,7 @@ require_once __DIR__ . '/includes/shortcodes.php';
 require_once __DIR__ . '/includes/shortcode-history.php';
 require_once __DIR__ . '/includes/shortcode-min-price.php';
 require_once __DIR__ . '/includes/shortcode-accessories.php';
+require_once __DIR__ . '/includes/shortcode-accessories-list.php';
 
 /* ===================== Exporter CSV ===================== */
 final class Dane_Gov_Exporter
