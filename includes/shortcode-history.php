@@ -258,7 +258,7 @@ class DGE_Shortcode_History
         }
         $css = '
 .dge-hist-trigger{cursor:pointer;background:none;border:none;margin:10px 0;padding:0;display:inline-flex;gap:8px;align-items:center;font-weight:500;font-size:14px;}
-.dge-hist-modal{position:fixed;inset:0;display:none;z-index:9999}
+.dge-hist-modal{position:fixed;inset:0;display:none;z-index:9999999999999}
 .dge-hist-modal[aria-hidden="false"]{display:block}
 .dge-hist-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.5)}
 .dge-hist-dialog{position:relative;max-width:720px;margin:6vh auto;background:#fff;padding:16px;border-radius:8px;box-shadow:0 10px 30px rgba(0,0,0,.2);z-index:1}

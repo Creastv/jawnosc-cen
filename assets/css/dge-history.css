@@ -1,9 +1,10 @@
-.dge-hist-close{
-    color: red;
-    position: absolute!important;
+.dge-acc-close, .dge-hist-close{
+	font-size:21px!important;
+	color: red!important;
+    position: absolute !important;
     right: -10px;
     top: -10px;
-    background-color: #e2e2e2!important;
+    background-color: #e2e2e2 !important;
     width: 22px;
     height: 22px;
     border-radius: 100%;
