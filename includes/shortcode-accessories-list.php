@@ -40,7 +40,7 @@ class DGE_Shortcode_Accessories_List
         ob_start();
 ?>
         <div class="dge-acc-list <?php echo esc_attr($a['class']); ?>">
-            <table class="dge-acc-list-table">
+            <table class="dge-acc-list-table" style="font-size:10px">
                 <thead>
                     <tr>
                         <th>Nazwa</th>
