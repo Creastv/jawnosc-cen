@@ -96,6 +96,7 @@ class DGE_Shortcode_Accessories
   // Zamknięcie modala (krzyżyk, backdrop, ESC)
   document.addEventListener('click', function(e){
     if(e.target.matches('[data-dge-close], .dge-acc-backdrop')){
+    e.preventDefault();
       closeM(e.target.closest('.dge-acc-modal'));
     }
   });
