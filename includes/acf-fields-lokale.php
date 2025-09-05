@@ -108,8 +108,28 @@ if (function_exists('acf_add_local_field_group')) :
                     ),
                 ),
             ),
+            /* --- TAB 3: POWIERZCHNIA --- */
+            array(
+                'key' => 'field_area_tab',
+                'label' => 'Powierzchnia',
+                'name' => '',
+                'type' => 'tab',
+                'placement' => 'top',
+            ),
+            array(
+                'key' => 'field_dg_area_total',
+                'label' => 'Powierzchnia całkowita',
+                'name' => 'area_total',
+                'type' => 'number',
+                'wrapper' => array('width' => '33.333'),
+                'instructions' => 'Podaj łączną powierzchnię lokalu.',
+                'append' => 'm²',
+                'min' => 0,
+                'step' => 0.01,
+            ),
 
-            /* --- TAB 3: PRZYNALEŻNOŚCI (WYBÓR INNYCH LOKALI) --- */
+
+            /* --- TAB 4: PRZYNALEŻNOŚCI (WYBÓR INNYCH LOKALI) --- */
             array(
                 'key' => 'field_acc_tab',
                 'label' => 'Przynależności',
