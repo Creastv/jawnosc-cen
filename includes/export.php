@@ -183,6 +183,7 @@ final class Dane_Gov_Exporter
                 'Nazwa inwestycji',
 
                 'Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny',
+                'Typ lokalu (taksonomia)', // <— NOWA KOLUMNA
                 'Nr lokalu lub domu jednorodzinnego nadany przez dewelopera',
 
                 // Powierzchnia lokalu
@@ -305,10 +306,16 @@ final class Dane_Gov_Exporter
 
                 $prospekt_url = $term_acf('prospekt_url');
 
-                /* ====== Rodzaj, nazwa/oznaczenie lokalu, ceny i powierzchnia ====== */
+                /* ====== Rodzaj, typ lokalu, nazwa/oznaczenie lokalu, ceny i powierzchnia ====== */
+                // Slugi typów (do mapowania na „Rodzaj nieruchomości”)
                 $typ_slugs   = wp_get_post_terms($post_id, 'typ-lokalu', ['fields' => 'slugs']);
                 $rodzaj_nier = self::map_property_type($typ_slugs);
 
+                // Nazwy typów lokalu (jeśli jest wiele — połączone pionową kreską)
+                $typ_names_arr = wp_get_post_terms($post_id, 'typ-lokalu', ['fields' => 'names']);
+                $typ_lokalu    = (!is_wp_error($typ_names_arr) && !empty($typ_names_arr)) ? implode('|', $typ_names_arr) : '';
+
+                // Nr lokalu (tytuł posta)
                 $nr_lokalu = get_the_title($post_id);
 
                 // Powierzchnia lokalu (area_total preferowane)
@@ -434,8 +441,9 @@ final class Dane_Gov_Exporter
                     // Nazwa inwestycji
                     $inv_name,
 
-                    // Rodzaj + numer (nazwa lokalu = tytuł CPT)
+                    // Rodzaj + (NOWE) Typ lokalu + numer (nazwa lokalu = tytuł CPT)
                     $rodzaj_nier,
+                    $typ_lokalu,        // <— nowa wartość odpowiadająca kolumnie "Typ lokalu (taksonomia)"
                     $nr_lokalu,
 
                     // Powierzchnia lokalu

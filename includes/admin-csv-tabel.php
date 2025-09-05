@@ -258,16 +258,16 @@ if (!class_exists('DGE_CSV_Table') && class_exists('WP_List_Table')) {
 
             $conf = dge_csv_get_dir_conf();
             $view = '';
-            if (!empty($conf['url'])) {
-                $view = sprintf(
-                    '<a href="%s" target="_blank" rel="noopener">%s</a> | ',
-                    esc_url(trailingslashit($conf['url']) . $item['file']),
-                    __('Podgląd', 'dge')
-                );
-            }
+            // if (!empty($conf['url'])) {
+            //     $view = sprintf(
+            //         '<a href="%s" target="_blank" rel="noopener">%s</a> | ',
+            //         esc_url(trailingslashit($conf['url']) . $item['file']),
+            //         __('Podgląd', 'dge')
+            //     );
+            // }
 
             $download = sprintf('<a href="%s">%s</a>', esc_url($download_url), __('Pobierz', 'dge'));
-            $copy     = sprintf('<button class="button button-small dge-copy" data-url="%s">%s</button>', esc_attr($download_url), __('Kopiuj URL', 'dge'));
+            // $copy     = sprintf('<button class="button button-small dge-copy" data-url="%s">%s</button>', esc_attr($download_url), __('Kopiuj URL', 'dge'));
 
             $del_url = wp_nonce_url(
                 add_query_arg([
@@ -279,7 +279,7 @@ if (!class_exists('DGE_CSV_Table') && class_exists('WP_List_Table')) {
             );
             $delete  = sprintf('<a href="%s" class="dge-delete">%s</a>', esc_url($del_url), __('Usuń', 'dge'));
 
-            return $view . $download . ' | ' . $copy . ' | ' . $delete;
+            return $view . $download . ' | ' . $copy . ' ' . $delete;
         }
 
         public function get_bulk_actions()

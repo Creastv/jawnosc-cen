@@ -38,6 +38,33 @@ if (function_exists('acf_add_local_field_group')) :
                 'instructions' => 'Wybierz inwestycję. Adres i inne dane zostaną pobrane z metadanych taksonomii.',
                 'wrapper' => array('width' => '33.333'),
             ),
+            /* --- TAB 2: TYP LOKALU (TAKSONOMIA) --- */
+            array(
+                'key'       => 'field_dg_tab_roomtype',
+                'label'     => 'Typ lokalu',
+                'name'      => '',
+                'type'      => 'tab',
+                'placement' => 'top',
+            ),
+
+            // tylko wybór typu lokalu (taksonomia)
+            array(
+                'key'           => 'field_dg_room_type_term',
+                'label'         => 'Typ lokalu',
+                'name'          => 'typ-lokalu_term',
+                'type'          => 'taxonomy',
+                'taxonomy'      => 'typ-lokalu',  // upewnij się, że to właściwy slug
+                'field_type'    => 'select',      // pojedynczy wybór; zmień na 'checkbox' jeśli chcesz wiele
+                'allow_null'    => 0,
+                'add_term'      => 1,             // pozwól dodawać nowe termy z poziomu edytora
+                'save_terms'    => 1,             // zapisze relację termów do posta
+                'load_terms'    => 1,             // wczyta aktualny wybór
+                'return_format' => 'id',          // spójnie z Twoją sekcją Inwestycja
+                'ui'            => 1,
+                'instructions'  => 'Wybierz typ lokalu.',
+                'wrapper'       => array('width' => '33.333'),
+            ),
+
 
             /* --- TAB 2: HISTORIA CEN --- */
             array(
