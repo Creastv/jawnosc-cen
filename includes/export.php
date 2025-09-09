@@ -3,13 +3,16 @@ if (!defined('ABSPATH')) exit;
 
 /**
  * Eksporter dla dane.gov.pl
- * Rozszerzony o: proj_www (taksonomia), status (lokal), cena całkowita (lokal + przynależności).
+ * Zmiany:
+ * - usunięto kolumnę "Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny"
+ * - mapowanie statusu: 1 => "Dostępny", 2 => "Zarezerwowany", 3 => "sprzedany"
+ * - proj_www (ACF w taksonomii inwestycje)
+ * - "Cena całkowita mieszkania i przynależności [zł]" przeniesiona ZA kolumny przynależności
  */
 final class Dane_Gov_Exporter
 {
     const CRON_HOOK = 'dane_gov_exporter_daily';
 
-    /** Katalog docelowy na pliki eksportu w /dane w katalogu głównym WP */
     public static function target_dir()
     {
         return trailingslashit(ABSPATH) . 'dane/';
@@ -62,11 +65,6 @@ final class Dane_Gov_Exporter
         }
     }
 
-    /**
-     * Główny eksport: osobny CSV dla każdej inwestycji (tax 'inwestycje').
-     * - Tworzy dwie kopie: dzienną (z datą) i "latest" (nadpisywaną).
-     * Zwraca tablicę: [ term_slug => [file_daily, file_latest], ... ].
-     */
     public function run_export()
     {
         $dir = self::target_dir();
@@ -98,7 +96,7 @@ final class Dane_Gov_Exporter
             $term_name = (string) $term->name;
             $term_slug = sanitize_title($term_name);
 
-            /* --- 1) Skan postów tej inwestycji (max liczba przynależności) --- */
+            // 1) Skan postów tej inwestycji (max liczba przynależności)
             $q_scan = new \WP_Query([
                 'post_type'      => 'lokale',
                 'post_status'    => 'publish',
@@ -138,7 +136,7 @@ final class Dane_Gov_Exporter
             }
             wp_reset_postdata();
 
-            /* --- 2) Nagłówki CSV (z dodatkowymi kolumnami) --- */
+            // 2) Nagłówki CSV (bez "Rodzaj nieruchomości")
             $columns = [
                 'Nazwa dewelopera',
                 'Forma prawna dewelopera',
@@ -178,11 +176,11 @@ final class Dane_Gov_Exporter
                 'Nr nieruchomości lokalizacji przedsięwzięcia deweloperskiego lub zadania inwestycyjnego',
                 'Kod pocztowy lokalizacji przedsięwzięcia deweloperskiego lub zadania inwestycyjnego',
 
-                // Nazwa inwestycji (nazwa termu) + NOWA kolumna WWW inwestycji
+                // Nazwa inwestycji + WWW inwestycji
                 'Nazwa inwestycji',
                 'Adres strony internetowej inwestycji',
 
-                'Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny',
+                // (usunięto: "Rodzaj nieruchomości...")
                 'Typ lokalu (taksonomia)',
                 'Nr lokalu lub domu jednorodzinnego nadany przez dewelopera',
                 'Status',
@@ -190,16 +188,13 @@ final class Dane_Gov_Exporter
                 // Powierzchnia lokalu
                 'Powierzchnia lokalu [m2]',
 
-                // UPROSZCZONE CENY (3 kolumny w tej kolejności)
+                // Ceny lokalu
                 'Cena lokalu mieszkalnego lub domu jednorodzinnego będących przedmiotem umowy stanowiąca iloczyn ceny m2 oraz powierzchni [zł]',
                 'Cena m 2 powierzchni użytkowej lokalu mieszkalnego / domu jednorodzinnego [zł]',
                 'Data od której cena obowiązuje',
-
-                // SUMA: lokal + wszystkie przynależności
-                'Cena całkowita mieszkania i przynależności [zł]',
             ];
 
-            // Dynamiczne kolumny przynależności (6 kolumn na każdą sztukę: +Powierzchnia)
+            // Dynamiczne kolumny przynależności
             $max_for_term = max(1, $max_acc);
             for ($i = 1; $i <= $max_for_term; $i++) {
                 $columns[] = "Rodzaj pomieszczenia przynależnego #$i";
@@ -209,6 +204,9 @@ final class Dane_Gov_Exporter
                 $columns[] = "Cena za m2 pomieszczenia przynależnego #$i [zł/m2]";
                 $columns[] = "Data ceny pomieszczenia przynależnego #$i";
             }
+
+            // *** Przeniesiona kolumna — PO przynależnościach ***
+            $columns[] = 'Cena całkowita mieszkania i przynależności [zł]';
 
             // Prawa / Świadczenia / Prospekt
             $columns = array_merge($columns, [
@@ -223,22 +221,21 @@ final class Dane_Gov_Exporter
                 'Adres strony internetowej, pod którym dostępny jest prospekt informacyjny',
             ]);
 
-            /* --- 3) Nazwy plików (kopie): dzienny + latest --- */
+            // 3) Pliki wyjściowe
             $filename_daily  = 'dane-' . $term_slug . '-' . $today . '.csv';
             $filename_latest = 'dane-' . $term_slug . '.csv';
 
             $file_daily  = $dir . $filename_daily;
             $file_latest = $dir . $filename_latest;
 
-            /* --- 4) Zapis do pliku DZIENNEGO --- */
+            // 4) Zapis do pliku DZIENNEGO
             $fh = fopen($file_daily, 'w');
-            if (!$fh) {
-                continue;
-            }
+            if (!$fh) continue;
+
             fwrite($fh, "\xEF\xBB\xBF");
             fputcsv($fh, $columns, ',');
 
-            // helper do pobierania pól z termu tej inwestycji
+            // helper do pobierania pól z termu inwestycji
             $term_acf = function ($field, $default = '') use ($term) {
                 $ctx1 = "{$term->taxonomy}_{$term->term_id}";
                 if (function_exists('get_field')) {
@@ -262,11 +259,11 @@ final class Dane_Gov_Exporter
                         return get_post_meta($post_id, $k, true);
                     };
 
-                // nazwa inwestycji (nazwa termu) i WWW inwestycji (ACF: proj_www)
+                // Nazwa + WWW inwestycji
                 $inv_name = $term_name;
                 $proj_www = $term_acf('proj_www');
 
-                /* ====== Deweloper (z ACF taksonomii inwestycje) ====== */
+                // Dane dewelopera (z termu)
                 $dev = [
                     'dev_name'        => $term_acf('company_developer_name'),
                     'dev_legal_form'  => $term_acf('company_legal_form'),
@@ -289,7 +286,7 @@ final class Dane_Gov_Exporter
                     'dev_addr_zip'    => $term_acf('company_addr_zip'),
                 ];
 
-                /* ====== Sprzedaż + przedsięwzięcie (z inwestycji) ====== */
+                // Sprzedaż + przedsięwzięcie (z inwestycji)
                 $sales_woj      = $term_acf('sales_woj');
                 $sales_powiat   = $term_acf('sales_powiat');
                 $sales_gmina    = $term_acf('sales_gmina');
@@ -311,15 +308,13 @@ final class Dane_Gov_Exporter
 
                 $prospekt_url = $term_acf('prospekt_url');
 
-                /* ====== Rodzaj, typ lokalu, nazwa/oznaczenie lokalu, ceny i powierzchnia ====== */
-                $typ_slugs   = wp_get_post_terms($post_id, 'typ-lokalu', ['fields' => 'slugs']);
-                $rodzaj_nier = self::map_property_type($typ_slugs);
-
+                // Typ lokalu (taksonomia) + nr lokalu + status (mapped)
                 $typ_names_arr = wp_get_post_terms($post_id, 'typ-lokalu', ['fields' => 'names']);
                 $typ_lokalu    = (!is_wp_error($typ_names_arr) && !empty($typ_names_arr)) ? implode('|', $typ_names_arr) : '';
 
-                $nr_lokalu = get_the_title($post_id);
-                $status    = (string) $acf('status');
+                $nr_lokalu  = get_the_title($post_id);
+                $status_raw = (string) $acf('status');
+                $status     = self::map_status($status_raw);
 
                 // Powierzchnia lokalu
                 $pow_m2 = self::num($acf('area_total'));
@@ -334,7 +329,7 @@ final class Dane_Gov_Exporter
                     ? number_format((float)$cena_m2 * (float)$pow_m2, 2, '.', '')
                     : '';
 
-                /* ====== PRZYNALEŻNOŚCI – per pozycja ====== */
+                // PRZYNALEŻNOŚCI
                 $acc_rows = [];
                 $acc_total_price = 0.0;
 
@@ -352,7 +347,6 @@ final class Dane_Gov_Exporter
 
                     $ozn = get_the_title($aid);
 
-                    // powierzchnia przynależności (area_total)
                     $a_area_raw = get_post_meta($aid, 'area_total', true);
                     $a_area = ($a_area_raw === '' || $a_area_raw === null)
                         ? ''
@@ -363,7 +357,6 @@ final class Dane_Gov_Exporter
                         ? ''
                         : number_format((float) str_replace(',', '.', str_replace(["\xC2\xA0", ' '], '', $a_cena_raw)), 2, '.', '');
 
-                    // do sumy całkowitej
                     if ($a_cena !== '') {
                         $acc_total_price += (float) $a_cena;
                     }
@@ -383,7 +376,7 @@ final class Dane_Gov_Exporter
                     $acc_rows[] = [$rodzaj, $ozn, $a_area, $a_cena, $a_cena_m2, $a_data];
                 }
 
-                // spłaszcz do komórek + padding do $max_for_term (6 kolumn na pozycję)
+                // spłaszczenie + padding
                 $acc_cells = [];
                 $acc_count = count($acc_rows);
                 for ($i = 0; $i < $max_for_term; $i++) {
@@ -394,7 +387,7 @@ final class Dane_Gov_Exporter
                     }
                 }
 
-                /* ====== Prawa/Świadczenia (z inwestycji) ====== */
+                // Prawa / Świadczenia
                 $rights_desc = $term_acf('rights_desc');
                 $rights_val  = self::dec_or_empty(self::num($term_acf('rights_value')));
                 $rights_date = self::date_or_empty($term_acf('rights_date'));
@@ -403,13 +396,13 @@ final class Dane_Gov_Exporter
                 $other_val   = self::dec_or_empty(self::num($term_acf('other_payments_value')));
                 $other_date  = self::date_or_empty($term_acf('other_payments_date'));
 
-                /* ====== Cena całkowita = cena lokalu (iloczyn) + suma przynależności ====== */
+                // Cena całkowita = cena lokalu (iloczyn) + suma przynależności
                 $cena_lokalu_float = ($cena_iloczyn !== '') ? (float) $cena_iloczyn : 0.0;
                 $cena_calkowita = number_format($cena_lokalu_float + $acc_total_price, 2, '.', '');
 
-                /* ====== Wiersz CSV ====== */
+                // Wiersz CSV (bez "Rodzaj nieruchomości")
                 $row = [
-                    // Deweloper (z termu inwestycji)
+                    // Deweloper
                     $dev['dev_name'],
                     $dev['dev_legal_form'],
                     $dev['dev_krs'],
@@ -450,12 +443,11 @@ final class Dane_Gov_Exporter
                     $proj_no,
                     $proj_zip,
 
-                    // Nazwa inwestycji + WWW inwestycji
+                    // Inwestycja
                     $inv_name,
                     $proj_www,
 
-                    // Rodzaj + Typ lokalu + nr lokalu + Status
-                    $rodzaj_nier,
+                    // Typ lokalu + nr + status
                     $typ_lokalu,
                     $nr_lokalu,
                     $status,
@@ -463,17 +455,17 @@ final class Dane_Gov_Exporter
                     // Powierzchnia lokalu
                     self::dec_or_empty($pow_m2),
 
-                    // *** CENY (3 kolumny) ***
-                    self::dec_or_empty($cena_iloczyn),   // 1) cena = iloczyn (m2 * metraż)
-                    self::dec_or_empty($cena_m2),        // 2) cena m2
-                    self::date_or_empty($cena_m2_data),  // 3) data od której cena obowiązuje
-
-                    // *** Cena całkowita (lokal + przynależności) ***
-                    self::dec_or_empty($cena_calkowita),
+                    // Ceny lokalu
+                    self::dec_or_empty($cena_iloczyn),
+                    self::dec_or_empty($cena_m2),
+                    self::date_or_empty($cena_m2_data),
                 ];
 
-                // Przynależności (dynamiczne: + powierzchnia)
+                // Przynależności
                 $row = array_merge($row, $acc_cells);
+
+                // *** Przeniesione: cena całkowita PO przynależnościach ***
+                $row[] = self::dec_or_empty($cena_calkowita);
 
                 // Prawa / Inne świadczenia / Prospekt
                 $row = array_merge($row, [
@@ -496,7 +488,7 @@ final class Dane_Gov_Exporter
 
             fclose($fh);
 
-            // 5) Kopia "latest"
+            // kopia "latest"
             @copy($file_daily, $file_latest);
             @chmod($file_daily, 0644);
             @chmod($file_latest, 0644);
@@ -518,16 +510,6 @@ final class Dane_Gov_Exporter
     }
 
     /* ===================== Helpers ===================== */
-    private static function map_property_type($slugs)
-    {
-        if (is_wp_error($slugs) || empty($slugs)) return 'lokal mieszkalny';
-        foreach ((array)$slugs as $s) {
-            $s = sanitize_title($s);
-            if (in_array($s, ['dom', 'dom-jednorodzinny', 'jednorodzinny'], true)) return 'dom jednorodzinny';
-            if (in_array($s, ['lokal', 'mieszkanie', 'lokal-mieszkalny'], true)) return 'lokal mieszkalny';
-        }
-        return 'lokal mieszkalny';
-    }
     private static function num($v)
     {
         if ($v === '' || $v === null) return '';
@@ -535,11 +517,13 @@ final class Dane_Gov_Exporter
         $v = str_replace(',', '.', $v);
         return is_numeric($v) ? (float) $v : '';
     }
+
     private static function dec_or_empty($v)
     {
         if ($v === '' || $v === null) return '';
         return number_format((float) $v, 2, '.', '');
     }
+
     private static function date_or_empty($v)
     {
         if (!$v) return '';
@@ -547,6 +531,7 @@ final class Dane_Gov_Exporter
         $t = strtotime($v);
         return $t ? date('Y-m-d', $t) : '';
     }
+
     private static function sanitize_csv($v)
     {
         if ($v === null) return '';
@@ -554,11 +539,29 @@ final class Dane_Gov_Exporter
         $v = preg_replace('/\r\n|\r|\n/', ' ', $v);
         return trim($v);
     }
+
     /** Puste → 'x' */
     private static function x_if_empty($v)
     {
         $v = (string) $v;
         return ($v === '' ? 'x' : $v);
     }
+
+    /** Mapowanie statusu 1/2/3 na tekst; inne wartości zwracane bez zmian */
+    private static function map_status($v)
+    {
+        $v = trim((string)$v);
+        switch ($v) {
+            case '1':
+                return 'Dostępny';
+            case '2':
+                return 'Zarezerwowany';
+            case '3':
+                return 'sprzedany';
+            default:
+                return $v;
+        }
+    }
 }
+
 new Dane_Gov_Exporter();
