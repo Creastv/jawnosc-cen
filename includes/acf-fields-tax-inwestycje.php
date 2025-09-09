@@ -69,6 +69,7 @@ if (function_exists('acf_add_local_field_group')) :
             array('key' => 'inv_proj_street', 'label' => 'Ulica (przedsięwzięcie)', 'name' => 'proj_street', 'type' => 'text', 'wrapper' => ['width' => '33.333']),
             array('key' => 'inv_proj_no',     'label' => 'Nr nieruchomości (przedsięwzięcie)', 'name' => 'proj_no', 'type' => 'text', 'wrapper' => ['width' => '33.333']),
             array('key' => 'inv_proj_zip',    'label' => 'Kod pocztowy (przedsięwzięcie)', 'name' => 'proj_zip', 'type' => 'text', 'wrapper' => ['width' => '33.333']),
+            array('key' => 'inv_proj_www',        'label' => 'Adres strony internetowej inwestycji', 'name' => 'proj_www', 'type' => 'url', 'wrapper' => ['width' => '25']),
 
             // --- TAB: Kontakt/Prospekt ---
             array(

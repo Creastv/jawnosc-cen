@@ -3,9 +3,8 @@ if (!defined('ABSPATH')) exit;
 
 /**
  * Eksporter dla dane.gov.pl
- * Przeniesione do osobnego pliku.
+ * Rozszerzony o: proj_www (taksonomia), status (lokal), cena całkowita (lokal + przynależności).
  */
-/* ===================== Exporter CSV ===================== */
 final class Dane_Gov_Exporter
 {
     const CRON_HOOK = 'dane_gov_exporter_daily';
@@ -139,7 +138,7 @@ final class Dane_Gov_Exporter
             }
             wp_reset_postdata();
 
-            /* --- 2) Nagłówki CSV (z powierzchniami) --- */
+            /* --- 2) Nagłówki CSV (z dodatkowymi kolumnami) --- */
             $columns = [
                 'Nazwa dewelopera',
                 'Forma prawna dewelopera',
@@ -179,12 +178,14 @@ final class Dane_Gov_Exporter
                 'Nr nieruchomości lokalizacji przedsięwzięcia deweloperskiego lub zadania inwestycyjnego',
                 'Kod pocztowy lokalizacji przedsięwzięcia deweloperskiego lub zadania inwestycyjnego',
 
-                // Nazwa inwestycji (nazwa termu) – przed "Rodzaj nieruchomości"
+                // Nazwa inwestycji (nazwa termu) + NOWA kolumna WWW inwestycji
                 'Nazwa inwestycji',
+                'Adres strony internetowej inwestycji',
 
                 'Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny',
-                'Typ lokalu (taksonomia)', // <— NOWA KOLUMNA
+                'Typ lokalu (taksonomia)',
                 'Nr lokalu lub domu jednorodzinnego nadany przez dewelopera',
+                'Status',
 
                 // Powierzchnia lokalu
                 'Powierzchnia lokalu [m2]',
@@ -193,6 +194,9 @@ final class Dane_Gov_Exporter
                 'Cena lokalu mieszkalnego lub domu jednorodzinnego będących przedmiotem umowy stanowiąca iloczyn ceny m2 oraz powierzchni [zł]',
                 'Cena m 2 powierzchni użytkowej lokalu mieszkalnego / domu jednorodzinnego [zł]',
                 'Data od której cena obowiązuje',
+
+                // SUMA: lokal + wszystkie przynależności
+                'Cena całkowita mieszkania i przynależności [zł]',
             ];
 
             // Dynamiczne kolumny przynależności (6 kolumn na każdą sztukę: +Powierzchnia)
@@ -258,8 +262,9 @@ final class Dane_Gov_Exporter
                         return get_post_meta($post_id, $k, true);
                     };
 
-                // nazwa inwestycji (nazwa termu)
+                // nazwa inwestycji (nazwa termu) i WWW inwestycji (ACF: proj_www)
                 $inv_name = $term_name;
+                $proj_www = $term_acf('proj_www');
 
                 /* ====== Deweloper (z ACF taksonomii inwestycje) ====== */
                 $dev = [
@@ -307,18 +312,16 @@ final class Dane_Gov_Exporter
                 $prospekt_url = $term_acf('prospekt_url');
 
                 /* ====== Rodzaj, typ lokalu, nazwa/oznaczenie lokalu, ceny i powierzchnia ====== */
-                // Slugi typów (do mapowania na „Rodzaj nieruchomości”)
                 $typ_slugs   = wp_get_post_terms($post_id, 'typ-lokalu', ['fields' => 'slugs']);
                 $rodzaj_nier = self::map_property_type($typ_slugs);
 
-                // Nazwy typów lokalu (jeśli jest wiele — połączone pionową kreską)
                 $typ_names_arr = wp_get_post_terms($post_id, 'typ-lokalu', ['fields' => 'names']);
                 $typ_lokalu    = (!is_wp_error($typ_names_arr) && !empty($typ_names_arr)) ? implode('|', $typ_names_arr) : '';
 
-                // Nr lokalu (tytuł posta)
                 $nr_lokalu = get_the_title($post_id);
+                $status    = (string) $acf('status');
 
-                // Powierzchnia lokalu (area_total preferowane)
+                // Powierzchnia lokalu
                 $pow_m2 = self::num($acf('area_total'));
                 if ($pow_m2 === '') {
                     $pow_m2 = self::num($acf('powierzchnia') !== '' ? $acf('powierzchnia') : $acf('metraz'));
@@ -331,9 +334,9 @@ final class Dane_Gov_Exporter
                     ? number_format((float)$cena_m2 * (float)$pow_m2, 2, '.', '')
                     : '';
 
-                /* ====== PRZYNALEŻNOŚCI – per pozycja, padding do $max_for_term ====== */
-                // Każda pozycja: [kind, label, area, price, price_m2, date]
+                /* ====== PRZYNALEŻNOŚCI – per pozycja ====== */
                 $acc_rows = [];
+                $acc_total_price = 0.0;
 
                 $acc_ids = function_exists('get_field')
                     ? get_field('accessory_unit_ids', $post_id, false)
@@ -359,6 +362,11 @@ final class Dane_Gov_Exporter
                     $a_cena     = ($a_cena_raw === '' || $a_cena_raw === null)
                         ? ''
                         : number_format((float) str_replace(',', '.', str_replace(["\xC2\xA0", ' '], '', $a_cena_raw)), 2, '.', '');
+
+                    // do sumy całkowitej
+                    if ($a_cena !== '') {
+                        $acc_total_price += (float) $a_cena;
+                    }
 
                     $a_cena_m2_raw = get_post_meta($aid, 'current_price_per_m2', true);
                     $a_cena_m2     = ($a_cena_m2_raw === '' || $a_cena_m2_raw === null)
@@ -394,6 +402,10 @@ final class Dane_Gov_Exporter
                 $other_desc  = $term_acf('other_payments_desc');
                 $other_val   = self::dec_or_empty(self::num($term_acf('other_payments_value')));
                 $other_date  = self::date_or_empty($term_acf('other_payments_date'));
+
+                /* ====== Cena całkowita = cena lokalu (iloczyn) + suma przynależności ====== */
+                $cena_lokalu_float = ($cena_iloczyn !== '') ? (float) $cena_iloczyn : 0.0;
+                $cena_calkowita = number_format($cena_lokalu_float + $acc_total_price, 2, '.', '');
 
                 /* ====== Wiersz CSV ====== */
                 $row = [
@@ -438,13 +450,15 @@ final class Dane_Gov_Exporter
                     $proj_no,
                     $proj_zip,
 
-                    // Nazwa inwestycji
+                    // Nazwa inwestycji + WWW inwestycji
                     $inv_name,
+                    $proj_www,
 
-                    // Rodzaj + (NOWE) Typ lokalu + numer (nazwa lokalu = tytuł CPT)
+                    // Rodzaj + Typ lokalu + nr lokalu + Status
                     $rodzaj_nier,
-                    $typ_lokalu,        // <— nowa wartość odpowiadająca kolumnie "Typ lokalu (taksonomia)"
+                    $typ_lokalu,
                     $nr_lokalu,
+                    $status,
 
                     // Powierzchnia lokalu
                     self::dec_or_empty($pow_m2),
@@ -453,6 +467,9 @@ final class Dane_Gov_Exporter
                     self::dec_or_empty($cena_iloczyn),   // 1) cena = iloczyn (m2 * metraż)
                     self::dec_or_empty($cena_m2),        // 2) cena m2
                     self::date_or_empty($cena_m2_data),  // 3) data od której cena obowiązuje
+
+                    // *** Cena całkowita (lokal + przynależności) ***
+                    self::dec_or_empty($cena_calkowita),
                 ];
 
                 // Przynależności (dynamiczne: + powierzchnia)
@@ -483,17 +500,6 @@ final class Dane_Gov_Exporter
             @copy($file_daily, $file_latest);
             @chmod($file_daily, 0644);
             @chmod($file_latest, 0644);
-
-            // (OPCJONALNIE) Retencja 30 dni
-            /*
-            $pattern = $dir . 'dane-' . $term_slug . '-*.csv';
-            $now = time();
-            foreach (glob($pattern) as $path) {
-                if (is_file($path) && ($now - filemtime($path)) > 30 * DAY_IN_SECONDS) {
-                    @unlink($path);
-                }
-            }
-            */
 
             if (defined('WP_DEBUG_LOG') && WP_DEBUG_LOG) {
                 error_log(sprintf(
