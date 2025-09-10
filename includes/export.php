@@ -181,7 +181,7 @@ final class Dane_Gov_Exporter
                 'Adres strony internetowej inwestycji',
 
                 // (usunięto: "Rodzaj nieruchomości...")
-                'Typ lokalu (taksonomia)',
+                'Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny',
                 'Nr lokalu lub domu jednorodzinnego nadany przez dewelopera',
                 'Status',
 
