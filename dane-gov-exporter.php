@@ -3,7 +3,7 @@
 /**
  * Plugin Name: Dane.gov.pl Exporter lokali
  * Description: Eksport CSV zgodny z jawnością cen — osobne pliki per inwestycja (latest + kopie dzienne), dynamiczne przynależności, uproszczone kolumny cen, powierzchnie area_total.
- * Version:     2.4.1
+ * Version:     2.4.2
  * Author:      Roial.pl
  */
 
