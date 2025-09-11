@@ -10,7 +10,7 @@ if (!defined('ABSPATH')) exit;
  * - "Cena całkowita mieszkania i przynależności [zł]" przeniesiona ZA kolumny przynależności
  * - "Data od której cena obowiązuje" (dla lokalu) → 0000-00-00, jeśli pusta/niepoprawna
  * - PRZYNALEŻNOŚCI: brak danych → puste (potem zamieniane na 'x' przez x_if_empty)
- * - NOWE: jeśli ACF 'do_not_export_danegov' = true → pomiń lokal (nie zapisuj wiersza)
+ * - NOWE: jeśli ACF 'do_not_export_danegov' = true/1/on/yes → pomiń lokal (nie zapisuj wiersza)
  */
 final class Dane_Gov_Exporter
 {
@@ -113,6 +113,20 @@ final class Dane_Gov_Exporter
                         'terms'    => [$term_id],
                     ],
                 ],
+                // WYKLUCZAMY lokale z ACF do_not_export_danegov ustawionym na "prawdę".
+                // Zostawiamy te, gdzie pole nie istnieje lub nie jest „prawdą”.
+                'meta_query'     => [
+                    'relation' => 'OR',
+                    [
+                        'key'     => 'do_not_export_danegov',
+                        'compare' => 'NOT EXISTS',
+                    ],
+                    [
+                        'key'     => 'do_not_export_danegov',
+                        'value'   => ['1', 'true', 'on', 'yes'],
+                        'compare' => 'NOT IN',
+                    ],
+                ],
             ]);
 
             if (!$q_scan->have_posts()) {
@@ -139,7 +153,7 @@ final class Dane_Gov_Exporter
             }
             wp_reset_postdata();
 
-            // 2) Nagłówki CSV (bez "Rodzaj nieruchomości")
+            // 2) Nagłówki CSV (BEZ "Rodzaj nieruchomości")
             $columns = [
                 'Nazwa dewelopera',
                 'Forma prawna dewelopera',
@@ -183,8 +197,7 @@ final class Dane_Gov_Exporter
                 'Nazwa inwestycji',
                 'Adres strony internetowej inwestycji',
 
-                // (usunięto: "Rodzaj nieruchomości...")
-                'Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny',
+                // (USUNIĘTO: "Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny")
                 'Nr lokalu lub domu jednorodzinnego nadany przez dewelopera',
                 'Status',
 
@@ -253,16 +266,15 @@ final class Dane_Gov_Exporter
 
             foreach ($post_ids as $post_id) {
 
-                /* === NOWE: pomijanie lokalu, jeśli ACF 'do_not_export_danegov' jest włączone === */
-                $exclude = function_exists('get_field')
+                /* === DRUGI BEZPIECZNIK: pomiń, jeśli ACF 'do_not_export_danegov' jest "prawdą" === */
+                $raw = function_exists('get_field')
                     ? get_field('do_not_export_danegov', $post_id)
                     : get_post_meta($post_id, 'do_not_export_danegov', true);
 
-                // Traktuj '1', 1, true jako włączone
-                if (!empty($exclude)) {
+                if (self::is_truthy($raw)) {
                     continue; // pomiń ten lokal, nie zapisuj wiersza
                 }
-                /* === KONIEC NOWE === */
+                /* === KONIEC BEZPIECZNIKA === */
 
                 // ACF/meta helper dla posta
                 $acf = function_exists('get_field')
@@ -407,7 +419,7 @@ final class Dane_Gov_Exporter
                 $cena_lokalu_float = ($cena_iloczyn !== '') ? (float) $cena_iloczyn : 0.0;
                 $cena_calkowita = number_format($cena_lokalu_float + $acc_total_price, 2, '.', '');
 
-                // Wiersz CSV (bez "Rodzaj nieruchomości")
+                // Wiersz CSV (BEZ "Rodzaj nieruchomości")
                 $row = [
                     // Deweloper
                     $dev['dev_name'],
@@ -454,8 +466,8 @@ final class Dane_Gov_Exporter
                     $inv_name,
                     $proj_www,
 
-                    // Typ lokalu + nr + status
-                    $typ_lokalu,
+                    // (USUNIĘTO kolumnę "Rodzaj nieruchomości")
+                    // Nr lokalu + Status
                     $nr_lokalu,
                     $status,
 
@@ -519,6 +531,16 @@ final class Dane_Gov_Exporter
     }
 
     /* ===================== Helpers ===================== */
+
+    /** Normalizacja "prawdy" dla różnych formatów ACF/meta */
+    private static function is_truthy($v)
+    {
+        if (is_bool($v)) return $v;
+        if (is_int($v)) return $v === 1;
+        $s = strtolower(trim((string)$v));
+        return in_array($s, ['1', 'true', 'on', 'yes'], true);
+    }
+
     private static function num($v)
     {
         if ($v === '' || $v === null) return '';
