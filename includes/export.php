@@ -4,13 +4,13 @@ if (!defined('ABSPATH')) exit;
 /**
  * Eksporter dla dane.gov.pl
  * Zmiany:
- * - usunięto kolumnę "Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny"
+ * - przywrócono kolumnę "Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny"
  * - mapowanie statusu: 1 => "Dostępny", 2 => "Zarezerwowany", 3 => "sprzedany"
  * - proj_www (ACF w taksonomii inwestycje)
  * - "Cena całkowita mieszkania i przynależności [zł]" przeniesiona ZA kolumny przynależności
  * - "Data od której cena obowiązuje" (dla lokalu) → 0000-00-00, jeśli pusta/niepoprawna
  * - PRZYNALEŻNOŚCI: brak danych → puste (potem zamieniane na 'x' przez x_if_empty)
- * - NOWE: jeśli ACF 'do_not_export_danegov' = true/1/on/yes → pomiń lokal (nie zapisuj wiersza)
+ * - jeśli ACF 'do_not_export_danegov' = true/1/on/yes → pomiń lokal (nie zapisuj wiersza)
  */
 final class Dane_Gov_Exporter
 {
@@ -153,7 +153,7 @@ final class Dane_Gov_Exporter
             }
             wp_reset_postdata();
 
-            // 2) Nagłówki CSV (BEZ "Rodzaj nieruchomości")
+            // 2) Nagłówki CSV (Z "Rodzaj nieruchomości")
             $columns = [
                 'Nazwa dewelopera',
                 'Forma prawna dewelopera',
@@ -197,7 +197,8 @@ final class Dane_Gov_Exporter
                 'Nazwa inwestycji',
                 'Adres strony internetowej inwestycji',
 
-                // (USUNIĘTO: "Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny")
+                // Przywrócone pole
+                'Rodzaj nieruchomości: lokal mieszkalny, dom jednorodzinny',
                 'Nr lokalu lub domu jednorodzinnego nadany przez dewelopera',
                 'Status',
 
@@ -419,7 +420,7 @@ final class Dane_Gov_Exporter
                 $cena_lokalu_float = ($cena_iloczyn !== '') ? (float) $cena_iloczyn : 0.0;
                 $cena_calkowita = number_format($cena_lokalu_float + $acc_total_price, 2, '.', '');
 
-                // Wiersz CSV (BEZ "Rodzaj nieruchomości")
+                // Wiersz CSV (Z "Rodzaj nieruchomości")
                 $row = [
                     // Deweloper
                     $dev['dev_name'],
@@ -466,8 +467,8 @@ final class Dane_Gov_Exporter
                     $inv_name,
                     $proj_www,
 
-                    // (USUNIĘTO kolumnę "Rodzaj nieruchomości")
-                    // Nr lokalu + Status
+                    // Przywrócone pole + nr + status
+                    $typ_lokalu,
                     $nr_lokalu,
                     $status,
 
