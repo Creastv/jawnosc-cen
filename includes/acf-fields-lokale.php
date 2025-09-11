@@ -181,6 +181,31 @@ if (function_exists('acf_add_local_field_group')) :
                 'instructions' => 'Wybierz lokale-przynależności (np. miejsce postojowe, komórka) oznaczone w „typ-lokalu”.',
             ),
 
+            // --- TAB 5: USTAWIENIA ---
+            array(
+                'key'       => 'field_dg_tab_settings',
+                'label'     => 'Ustawienia',
+                'name'      => '',
+                'type'      => 'tab',
+                'placement' => 'top',
+            ),
+
+            // Przełącznik: Nie eksportuj do Dane.gov.pl
+            array(
+                'key'           => 'field_dg_do_not_export',
+                'label'         => 'Nie eksportuj do Dane.gov.pl',
+                'name'          => 'do_not_export_danegov', // slug w kodzie
+                'type'          => 'true_false',
+                'ui'            => 1,
+                'ui_on_text'    => 'Tak',
+                'ui_off_text'   => 'Nie',
+                'default_value' => 0,
+                'message'       => 'Zaznacz, aby wykluczyć ten lokal z eksportu',
+                'wrapper'       => array('width' => '33.333'),
+                'instructions'  => 'Jeśli włączone, lokal nie będzie uwzględniony w eksporcie do Dane.gov.pl.',
+            ),
+
+
 
 
         ),

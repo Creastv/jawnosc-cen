@@ -8,6 +8,9 @@ if (!defined('ABSPATH')) exit;
  * - mapowanie statusu: 1 => "Dostępny", 2 => "Zarezerwowany", 3 => "sprzedany"
  * - proj_www (ACF w taksonomii inwestycje)
  * - "Cena całkowita mieszkania i przynależności [zł]" przeniesiona ZA kolumny przynależności
+ * - "Data od której cena obowiązuje" (dla lokalu) → 0000-00-00, jeśli pusta/niepoprawna
+ * - PRZYNALEŻNOŚCI: brak danych → puste (potem zamieniane na 'x' przez x_if_empty)
+ * - NOWE: jeśli ACF 'do_not_export_danegov' = true → pomiń lokal (nie zapisuj wiersza)
  */
 final class Dane_Gov_Exporter
 {
@@ -249,6 +252,18 @@ final class Dane_Gov_Exporter
             };
 
             foreach ($post_ids as $post_id) {
+
+                /* === NOWE: pomijanie lokalu, jeśli ACF 'do_not_export_danegov' jest włączone === */
+                $exclude = function_exists('get_field')
+                    ? get_field('do_not_export_danegov', $post_id)
+                    : get_post_meta($post_id, 'do_not_export_danegov', true);
+
+                // Traktuj '1', 1, true jako włączone
+                if (!empty($exclude)) {
+                    continue; // pomiń ten lokal, nie zapisuj wiersza
+                }
+                /* === KONIEC NOWE === */
+
                 // ACF/meta helper dla posta
                 $acf = function_exists('get_field')
                     ? function ($k) use ($post_id) {
@@ -316,15 +331,17 @@ final class Dane_Gov_Exporter
                 $status_raw = (string) $acf('status');
                 $status     = self::map_status($status_raw);
 
-                // Powierzchnia lokalu
+                // Powierzchnia lokalu (→ 0.00 gdy pusto)
                 $pow_m2 = self::num($acf('area_total'));
                 if ($pow_m2 === '') {
                     $pow_m2 = self::num($acf('powierzchnia') !== '' ? $acf('powierzchnia') : $acf('metraz'));
                 }
 
+                // Cena m2 (→ 0.00 gdy pusto) + data
                 $cena_m2      = self::num($acf('current_price_per_m2'));
                 $cena_m2_data = $acf('price_valid_from') ?: '';
 
+                // Iloczyn (→ 0.00 gdy pusto)
                 $cena_iloczyn = ($cena_m2 !== '' && $pow_m2 !== '')
                     ? number_format((float)$cena_m2 * (float)$pow_m2, 2, '.', '')
                     : '';
@@ -347,31 +364,17 @@ final class Dane_Gov_Exporter
 
                     $ozn = get_the_title($aid);
 
-                    $a_area_raw = get_post_meta($aid, 'area_total', true);
-                    $a_area = ($a_area_raw === '' || $a_area_raw === null)
-                        ? ''
-                        : number_format((float) str_replace(',', '.', str_replace(["\xC2\xA0", ' '], '', $a_area_raw)), 2, '.', '');
-
-                    $a_cena_raw = get_post_meta($aid, 'current_price', true);
-                    $a_cena     = ($a_cena_raw === '' || $a_cena_raw === null)
-                        ? ''
-                        : number_format((float) str_replace(',', '.', str_replace(["\xC2\xA0", ' '], '', $a_cena_raw)), 2, '.', '');
+                    // Dla przynależności: brak danych -> puste (zostaną 'x' po x_if_empty)
+                    $a_area    = self::dec_or_empty(self::num(get_post_meta($aid, 'area_total', true)));
+                    $a_cena    = self::dec_or_empty(self::num(get_post_meta($aid, 'current_price', true)));
+                    $a_cena_m2 = self::dec_or_empty(self::num(get_post_meta($aid, 'current_price_per_m2', true)));
 
                     if ($a_cena !== '') {
                         $acc_total_price += (float) $a_cena;
                     }
 
-                    $a_cena_m2_raw = get_post_meta($aid, 'current_price_per_m2', true);
-                    $a_cena_m2     = ($a_cena_m2_raw === '' || $a_cena_m2_raw === null)
-                        ? ''
-                        : number_format((float) str_replace(',', '.', str_replace(["\xC2\xA0", ' '], '', $a_cena_m2_raw)), 2, '.', '');
-
                     $a_data_raw = get_post_meta($aid, 'price_valid_from', true);
-                    if ($a_data_raw && preg_match('/^\d{4}-\d{2}-\d{2}$/', $a_data_raw)) {
-                        $a_data = $a_data_raw;
-                    } else {
-                        $a_data = $a_data_raw ? date('Y-m-d', strtotime($a_data_raw)) : '';
-                    }
+                    $a_data = self::date_or_empty($a_data_raw);
 
                     $acc_rows[] = [$rodzaj, $ozn, $a_area, $a_cena, $a_cena_m2, $a_data];
                 }
@@ -379,10 +382,14 @@ final class Dane_Gov_Exporter
                 // spłaszczenie + padding
                 $acc_cells = [];
                 $acc_count = count($acc_rows);
+                $max_for_term = max(1, $max_acc);
+
                 for ($i = 0; $i < $max_for_term; $i++) {
                     if ($i < $acc_count) {
+                        // Istniejący wiersz
                         $acc_cells = array_merge($acc_cells, $acc_rows[$i]);
                     } else {
+                        // Brakujące przynależności → same puste pola (potem 'x')
                         $acc_cells = array_merge($acc_cells, ['', '', '', '', '', '']);
                     }
                 }
@@ -452,13 +459,15 @@ final class Dane_Gov_Exporter
                     $nr_lokalu,
                     $status,
 
-                    // Powierzchnia lokalu
-                    self::dec_or_empty($pow_m2),
+                    // Powierzchnia lokalu  → 0.00 gdy pusto
+                    self::dec_or_zero($pow_m2),
 
-                    // Ceny lokalu
-                    self::dec_or_empty($cena_iloczyn),
-                    self::dec_or_empty($cena_m2),
-                    self::date_or_empty($cena_m2_data),
+                    // Ceny lokalu → 0.00 gdy pusto
+                    self::dec_or_zero($cena_iloczyn),
+                    self::dec_or_zero($cena_m2),
+
+                    // Data ceny lokalu (puste/niepoprawne → 0000-00-00)
+                    self::date_or_default($cena_m2_data),
                 ];
 
                 // Przynależności
@@ -524,12 +533,28 @@ final class Dane_Gov_Exporter
         return number_format((float) $v, 2, '.', '');
     }
 
+    /** Liczba dziesiętna z 2 miejscami; jeśli pusto → 0.00 */
+    private static function dec_or_zero($v)
+    {
+        $num = ($v === '' || $v === null) ? 0 : (float) $v;
+        return number_format($num, 2, '.', '');
+    }
+
     private static function date_or_empty($v)
     {
         if (!$v) return '';
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) return $v;
         $t = strtotime($v);
         return $t ? date('Y-m-d', $t) : '';
+    }
+
+    /** Data w formacie Y-m-d; jeśli pusta/niepoprawna → 0000-00-00 (używana dla daty ceny lokalu) */
+    private static function date_or_default($v, $default = '0000-00-00')
+    {
+        if (!$v) return $default;
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) return $v;
+        $t = strtotime($v);
+        return $t ? date('Y-m-d', $t) : $default;
     }
 
     private static function sanitize_csv($v)
@@ -540,7 +565,7 @@ final class Dane_Gov_Exporter
         return trim($v);
     }
 
-    /** Puste → 'x' */
+    /** Puste → 'x' (dla kolumn opisowych/tekstowych i pustych przynależności) */
     private static function x_if_empty($v)
     {
         $v = (string) $v;
